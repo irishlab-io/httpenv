@@ -1,3 +1,8 @@
+<<<<<<< HEAD
+=======
+# syntax=docker/dockerfile:1
+
+>>>>>>> 0f08e65 (Fix docker image)
 FROM docker.io/library/golang:alpine3.20
 COPY httpenv.go /go
 RUN go build httpenv.go
