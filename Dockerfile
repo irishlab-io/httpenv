@@ -1,4 +1,4 @@
-FROM docker.io/library/golang:alpine3.20 AS build
+FROM docker.io/library/golang:1.22.5-alpine3.20 AS build
 COPY httpenv.go /go
 RUN go build httpenv.go
 

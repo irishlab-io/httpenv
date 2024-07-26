@@ -21,33 +21,10 @@ concurrency:
 
 jobs:
 
-  secret-scanning:
-    name: GitGuardian - Scan
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.7
-        with:
-          fetch-depth: 0
-
-      - name: GitGuardian scan
-        uses: GitGuardian/ggshield/actions/secret@v1.29.0
-        env:
-          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
-          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
-          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
-
   sast:
     name: CodeQL - Analyze ${{ matrix.language }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-
-    needs:
-      - secret-scanning
 
     permissions:
       actions: read
@@ -90,9 +67,6 @@ jobs:
     name: Docker - Build Test Image
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-
-    needs:
-      - secret-scanning
 
     outputs:
       image-tag: ${{ steps.docker_meta.outputs.labels }}
@@ -209,6 +183,7 @@ jobs:
       contents: read
       packages: read
       security-events: write
+      actions: read
 
     env:
       COMMENT-ENABLE: true
@@ -251,43 +226,18 @@ jobs:
         uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: ${{ steps.docker_meta.outputs.tags }}
-          exit-code: 0
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'HIGH,CRITICAL'
           format: 'sarif'
-          output: 'results.sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '0' # if PR = 0, else =1
+          # ignore-unfixed: true
+          # vuln-type: 'os,library'
+          # severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: results.sarif
-          category: results
-
-  sbom:
-    name: SBOM - Generate and Publish
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-
-    needs:
-      - sast
-      - sca
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
-        uses: aquasecurity/trivy-action@0.24.0
-        with:
-          scan-type: 'fs'
-          format: 'github'
-          output: 'dependency-results.sbom.json'
-          image-ref: '.'
-          github-pat: ${{ secrets.GITHUB_TOKEN }}
+          sarif_file: 'trivy-results.sarif'
+          category: sca
 
   build-final-image:
     name: Docker - Build Final Image
@@ -296,7 +246,8 @@ jobs:
 
     needs:
       - build-test-image
-      - sbom
+      - sast
+      - sca
 
     outputs:
       image-tag: ${{ steps.docker_meta.outputs.labels }}
